@@ -12,11 +12,76 @@
 // Views
 #import "QBImagePickerController.h"
 #import "QBAssetCell.h"
+#import "QBCheckmarkView.h"
 #import "QBVideoIndicatorView.h"
 
 static CGSize CGSizeScale(CGSize size, CGFloat scale) {
     return CGSizeMake(size.width * scale, size.height * scale);
 }
+
+static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
+
+#pragma mark - QBAddPhotosCell
+
+@interface QBAddPhotosCell : UICollectionViewCell
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *titleLabel;
+- (void)applyTintColor:(UIColor *)tintColor;
+@end
+
+@implementation QBAddPhotosCell
+
+- (instancetype)initWithFrame:(CGRect)frame
+{
+    self = [super initWithFrame:frame];
+    if (self) {
+        if (@available(iOS 13.0, *)) {
+            self.contentView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+        } else {
+            self.contentView.backgroundColor = [UIColor colorWithWhite:0.93 alpha:1.0];
+        }
+
+        UIImage *icon = nil;
+        if (@available(iOS 13.0, *)) {
+            UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:28.0 weight:UIImageSymbolWeightMedium];
+            icon = [UIImage systemImageNamed:@"plus" withConfiguration:cfg];
+        }
+        _iconView = [[UIImageView alloc] initWithImage:icon];
+        _iconView.contentMode = UIViewContentModeScaleAspectFit;
+        _iconView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:_iconView];
+
+        _titleLabel = [[UILabel alloc] init];
+        _titleLabel.font = [UIFont systemFontOfSize:13.0];
+        _titleLabel.textAlignment = NSTextAlignmentCenter;
+        _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _titleLabel.numberOfLines = 1;
+        _titleLabel.adjustsFontSizeToFitWidth = YES;
+        _titleLabel.minimumScaleFactor = 0.75;
+        [self.contentView addSubview:_titleLabel];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_iconView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor constant:-12.0],
+            [_iconView.widthAnchor constraintEqualToConstant:32.0],
+            [_iconView.heightAnchor constraintEqualToConstant:32.0],
+
+            [_titleLabel.topAnchor constraintEqualToAnchor:_iconView.bottomAnchor constant:6.0],
+            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:4.0],
+            [_titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-4.0],
+        ]];
+    }
+    return self;
+}
+
+- (void)applyTintColor:(UIColor *)tintColor
+{
+    UIColor *color = tintColor ?: [UIColor systemBlueColor];
+    _iconView.tintColor = color;
+    _titleLabel.textColor = color;
+}
+
+@end
 
 @interface QBImagePickerController (Private)
 
@@ -76,9 +141,55 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
     
     [self setUpToolbarItems];
     [self resetCachedAssets];
-    
+
+    // Register the leading "Add Photos" cell so it can be dequeued when
+    // `showsAddPhotosCell` is enabled on the picker controller.
+    [self.collectionView registerClass:[QBAddPhotosCell class] forCellWithReuseIdentifier:QBAddPhotosCellIdentifier];
+
     // Register observer
     [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
+}
+
+#pragma mark - Add Photos cell helpers
+
+- (BOOL)shouldShowAddCell
+{
+    return self.imagePickerController.showsAddPhotosCell;
+}
+
+// Number of leading non-asset cells (currently 0 or 1).
+- (NSInteger)leadingExtraCellCount
+{
+    return [self shouldShowAddCell] ? 1 : 0;
+}
+
+// Convert a collection view item index to an index into `self.fetchResult`.
+// Returns NSNotFound when `item` points at a non-asset (e.g. the +cell).
+- (NSInteger)assetIndexForItem:(NSInteger)item
+{
+    NSInteger offset = [self leadingExtraCellCount];
+    if (item < offset) {
+        return NSNotFound;
+    }
+    return item - offset;
+}
+
+// Convert a fetch-result asset index back to the matching collection view
+// index path (item 0 is reserved for the +cell when shown).
+- (NSIndexPath *)indexPathForAssetIndex:(NSInteger)assetIndex
+{
+    return [NSIndexPath indexPathForItem:(assetIndex + [self leadingExtraCellCount]) inSection:0];
+}
+
+// Shift a set of asset-space indexes into collection-view-space index paths.
+- (NSArray<NSIndexPath *> *)shiftedIndexPathsFromIndexes:(NSIndexSet *)indexes
+{
+    NSMutableArray<NSIndexPath *> *paths = [NSMutableArray arrayWithCapacity:indexes.count];
+    NSInteger offset = [self leadingExtraCellCount];
+    [indexes enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
+        [paths addObject:[NSIndexPath indexPathForItem:(idx + offset) inSection:0]];
+    }];
+    return paths;
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -108,7 +219,7 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
         // when presenting as a .FormSheet on iPad, the frame is not correct until just after viewWillAppear:
         // dispatching to the main thread waits one run loop until the frame is update and the layout is complete
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSIndexPath *indexPath = [NSIndexPath indexPathForItem:(self.fetchResult.count - 1) inSection:0];
+            NSIndexPath *indexPath = [self indexPathForAssetIndex:(self.fetchResult.count - 1)];
             [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionTop animated:NO];
         });
     }
@@ -253,7 +364,7 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
             // Get index of previous selected asset
             PHAsset *asset = [self.imagePickerController.selectedAssets firstObject];
             NSInteger assetIndex = [self.fetchResult indexOfObject:asset];
-            self.lastSelectedItemIndexPath = [NSIndexPath indexPathForItem:assetIndex inSection:0];
+            self.lastSelectedItemIndexPath = [self indexPathForAssetIndex:assetIndex];
         }
     } else {
         self.fetchResult = nil;
@@ -373,8 +484,9 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
     
     NSMutableArray *assets = [NSMutableArray arrayWithCapacity:indexPaths.count];
     for (NSIndexPath *indexPath in indexPaths) {
-        if (indexPath.item < self.fetchResult.count) {
-            PHAsset *asset = self.fetchResult[indexPath.item];
+        NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
+        if (assetIndex != NSNotFound && assetIndex < (NSInteger)self.fetchResult.count) {
+            PHAsset *asset = self.fetchResult[assetIndex];
             [assets addObject:asset];
         }
     }
@@ -397,21 +509,23 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
                 // We need to reload all if the incremental diffs are not available
                 [self.collectionView reloadData];
             } else {
-                // If we have incremental diffs, tell the collection view to animate insertions and deletions
+                // If we have incremental diffs, tell the collection view to animate insertions and deletions.
+                // Indexes coming from PHFetchResultChangeDetails are in asset space; shift them by the
+                // number of leading non-asset cells (e.g. the +cell) before applying to the collection view.
                 [self.collectionView performBatchUpdates:^{
                     NSIndexSet *removedIndexes = [collectionChanges removedIndexes];
                     if ([removedIndexes count]) {
-                        [self.collectionView deleteItemsAtIndexPaths:[removedIndexes qb_indexPathsFromIndexesWithSection:0]];
+                        [self.collectionView deleteItemsAtIndexPaths:[self shiftedIndexPathsFromIndexes:removedIndexes]];
                     }
-                    
+
                     NSIndexSet *insertedIndexes = [collectionChanges insertedIndexes];
                     if ([insertedIndexes count]) {
-                        [self.collectionView insertItemsAtIndexPaths:[insertedIndexes qb_indexPathsFromIndexesWithSection:0]];
+                        [self.collectionView insertItemsAtIndexPaths:[self shiftedIndexPathsFromIndexes:insertedIndexes]];
                     }
-                    
+
                     NSIndexSet *changedIndexes = [collectionChanges changedIndexes];
                     if ([changedIndexes count]) {
-                        [self.collectionView reloadItemsAtIndexPaths:[changedIndexes qb_indexPathsFromIndexesWithSection:0]];
+                        [self.collectionView reloadItemsAtIndexPaths:[self shiftedIndexPathsFromIndexes:changedIndexes]];
                     }
                 } completion:NULL];
             }
@@ -439,17 +553,45 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section
 {
-    return self.fetchResult.count;
+    return self.fetchResult.count + [self leadingExtraCellCount];
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath
 {
+    // Leading "Add Photos" cell (only present when `showsAddPhotosCell` is YES on the picker controller).
+    NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
+    if (assetIndex == NSNotFound) {
+        QBAddPhotosCell *addCell = [collectionView dequeueReusableCellWithReuseIdentifier:QBAddPhotosCellIdentifier forIndexPath:indexPath];
+        NSBundle *bundle = self.imagePickerController.assetBundle;
+        addCell.titleLabel.text = NSLocalizedStringFromTableInBundle(@"assets.add-photos", @"QBImagePicker", bundle, @"Add Photos");
+        [addCell applyTintColor:self.imagePickerController.tintColor];
+        return addCell;
+    }
+
     QBAssetCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AssetCell" forIndexPath:indexPath];
     cell.tag = indexPath.item;
     cell.showsOverlayViewWhenSelected = self.imagePickerController.allowsMultipleSelection;
-    
+
+    // Theme the selection checkmark to match the host app tint. The
+    // checkmark view is a subview of the cell's overlay and is only
+    // accessible via subview lookup (no IBOutlet on QBAssetCell).
+    UIColor *tint = self.imagePickerController.tintColor;
+    if (tint) {
+        for (UIView *sub in cell.contentView.subviews) {
+            for (UIView *inner in sub.subviews) {
+                if ([inner isKindOfClass:[QBCheckmarkView class]]) {
+                    QBCheckmarkView *checkmark = (QBCheckmarkView *)inner;
+                    if (![checkmark.bodyColor isEqual:tint]) {
+                        checkmark.bodyColor = tint;
+                        [checkmark setNeedsDisplay];
+                    }
+                }
+            }
+        }
+    }
+
     // Image
-    PHAsset *asset = self.fetchResult[indexPath.item];
+    PHAsset *asset = self.fetchResult[assetIndex];
     CGSize itemSize = [(UICollectionViewFlowLayout *)collectionView.collectionViewLayout itemSize];
     CGSize targetSize = CGSizeScale(itemSize, [[UIScreen mainScreen] scale]);
     
@@ -556,25 +698,45 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
 
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldSelectItemAtIndexPath:(NSIndexPath *)indexPath
 {
+    NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
+    // The leading "Add Photos" cell must always be tappable: returning YES here
+    // is required so UICollectionView still routes the tap to
+    // didSelectItemAtIndexPath:. The visible "selected" state is cleared right
+    // after we forward the tap to the delegate.
+    if (assetIndex == NSNotFound) {
+        return YES;
+    }
+
     if ([self.imagePickerController.delegate respondsToSelector:@selector(qb_imagePickerController:shouldSelectAsset:)]) {
-        PHAsset *asset = self.fetchResult[indexPath.item];
+        PHAsset *asset = self.fetchResult[assetIndex];
         return [self.imagePickerController.delegate qb_imagePickerController:self.imagePickerController shouldSelectAsset:asset];
     }
-    
+
     if ([self isAutoDeselectEnabled]) {
         return YES;
     }
-    
+
     return ![self isMaximumSelectionLimitReached];
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath
 {
     QBImagePickerController *imagePickerController = self.imagePickerController;
+
+    // Tap on the "Add Photos" cell -> immediately drop the selection state so
+    // it behaves like a button, then forward the tap to the delegate.
+    NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
+    if (assetIndex == NSNotFound) {
+        [collectionView deselectItemAtIndexPath:indexPath animated:NO];
+        if ([imagePickerController.delegate respondsToSelector:@selector(qb_imagePickerControllerDidTapAddPhotos:)]) {
+            [imagePickerController.delegate qb_imagePickerControllerDidTapAddPhotos:imagePickerController];
+        }
+        return;
+    }
+
     NSMutableOrderedSet *selectedAssets = imagePickerController.selectedAssets;
-    
-    PHAsset *asset = self.fetchResult[indexPath.item];
-    
+    PHAsset *asset = self.fetchResult[assetIndex];
+
     if (imagePickerController.allowsMultipleSelection) {
         if ([self isAutoDeselectEnabled] && selectedAssets.count > 0) {
             // Remove previous selected asset from set
@@ -617,11 +779,16 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
     if (!self.imagePickerController.allowsMultipleSelection) {
         return;
     }
-    
+
+    NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
+    if (assetIndex == NSNotFound) {
+        return;
+    }
+
     QBImagePickerController *imagePickerController = self.imagePickerController;
     NSMutableOrderedSet *selectedAssets = imagePickerController.selectedAssets;
-    
-    PHAsset *asset = self.fetchResult[indexPath.item];
+
+    PHAsset *asset = self.fetchResult[assetIndex];
     
     // Remove asset from set
     [selectedAssets removeObject:asset];

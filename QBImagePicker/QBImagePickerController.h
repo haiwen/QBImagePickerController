@@ -21,6 +21,11 @@
 - (void)qb_imagePickerController:(QBImagePickerController *)imagePickerController didSelectAsset:(PHAsset *)asset;
 - (void)qb_imagePickerController:(QBImagePickerController *)imagePickerController didDeselectAsset:(PHAsset *)asset;
 
+// Called when the user taps the leading "Add Photos" cell that is shown
+// when `showsAddPhotosCell` is enabled (typically used in Limited photo
+// access mode to let the user expand the limited photo selection).
+- (void)qb_imagePickerControllerDidTapAddPhotos:(QBImagePickerController *)imagePickerController;
+
 @end
 
 typedef NS_ENUM(NSUInteger, QBImagePickerMediaType) {
@@ -47,5 +52,15 @@ typedef NS_ENUM(NSUInteger, QBImagePickerMediaType) {
 
 @property (nonatomic, assign) NSUInteger numberOfColumnsInPortrait;
 @property (nonatomic, assign) NSUInteger numberOfColumnsInLandscape;
+
+// When YES, an extra "Add Photos" cell is inserted as the first item in
+// every album grid so the user can quickly expand the limited photo
+// selection without leaving the picker. Defaults to NO.
+@property (nonatomic, assign) BOOL showsAddPhotosCell;
+
+// Theme color applied to the navigation bar (Cancel/Done buttons), the
+// "Add Photos" cell tint, and the selection checkmark body. Defaults to a
+// Seafile orange (RGB 240/128/48) so the picker matches the host app theme.
+@property (nonatomic, strong) UIColor *tintColor;
 
 @end

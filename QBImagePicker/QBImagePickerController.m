@@ -38,7 +38,11 @@
         self.minimumNumberOfSelection = 1;
         self.numberOfColumnsInPortrait = 4;
         self.numberOfColumnsInLandscape = 7;
-        
+
+        // Default theme color matches the Seafile app primary orange.
+        // Hosts may override this before presenting the picker.
+        self.tintColor = [UIColor colorWithRed:240.0/255.0 green:128.0/255.0 blue:48.0/255.0 alpha:1.0];
+
         _selectedAssets = [NSMutableOrderedSet orderedSet];
         
         // Get asset bundle
@@ -49,13 +53,25 @@
         }
         
         [self setUpAlbumsViewController];
-        
+
+        // Apply the theme tint to the embedded navigation bar so Cancel/Done
+        // bar buttons render in the host app color instead of the system blue.
+        self.albumsNavigationController.navigationBar.tintColor = self.tintColor;
+
         // Set instance
         QBAlbumsViewController *albumsViewController = (QBAlbumsViewController *)self.albumsNavigationController.topViewController;
         albumsViewController.imagePickerController = self;
     }
     
     return self;
+}
+
+- (void)setTintColor:(UIColor *)tintColor
+{
+    _tintColor = tintColor;
+    // The navigation controller is created lazily in setUpAlbumsViewController;
+    // when the host changes the tint after init, propagate it immediately.
+    self.albumsNavigationController.navigationBar.tintColor = tintColor;
 }
 
 - (void)setUpAlbumsViewController
