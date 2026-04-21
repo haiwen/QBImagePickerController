@@ -60,7 +60,8 @@ typedef NS_ENUM(NSUInteger, QBImagePickerMediaType) {
 
 // Theme color applied to the navigation bar (Cancel/Done buttons), the
 // "Add Photos" cell tint, and the selection checkmark body. Defaults to a
-// Seafile orange (RGB 240/128/48) so the picker matches the host app theme.
+// neutral gray (#666666) so the picker stays visually calm; hosts may
+// override before presenting if a different accent is desired.
 @property (nonatomic, strong) UIColor *tintColor;
 
 @end

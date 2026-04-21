@@ -39,9 +39,11 @@
         self.numberOfColumnsInPortrait = 4;
         self.numberOfColumnsInLandscape = 7;
 
-        // Default theme color matches the Seafile app primary orange.
-        // Hosts may override this before presenting the picker.
-        self.tintColor = [UIColor colorWithRed:240.0/255.0 green:128.0/255.0 blue:48.0/255.0 alpha:1.0];
+        // Default theme color is a neutral gray (#666666) so navigation bar
+        // buttons (Cancel/Done), the selection checkmark and the trailing
+        // "Add Photos" cell all render in a calm tone. Hosts may override
+        // this before presenting the picker.
+        self.tintColor = [UIColor colorWithRed:0x66/255.0 green:0x66/255.0 blue:0x66/255.0 alpha:1.0];
 
         _selectedAssets = [NSMutableOrderedSet orderedSet];
         

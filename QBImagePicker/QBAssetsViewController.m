@@ -142,7 +142,7 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
     [self setUpToolbarItems];
     [self resetCachedAssets];
 
-    // Register the leading "Add Photos" cell so it can be dequeued when
+    // Register the trailing "Add Photos" cell so it can be dequeued when
     // `showsAddPhotosCell` is enabled on the picker controller.
     [self.collectionView registerClass:[QBAddPhotosCell class] forCellWithReuseIdentifier:QBAddPhotosCellIdentifier];
 
@@ -157,39 +157,30 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
     return self.imagePickerController.showsAddPhotosCell;
 }
 
-// Number of leading non-asset cells (currently 0 or 1).
-- (NSInteger)leadingExtraCellCount
+// Number of trailing non-asset cells (currently 0 or 1). When 1, the
+// "Add Photos" cell sits at the very end of the grid (i.e. immediately
+// to the right of the newest photo) instead of the leading position.
+- (NSInteger)trailingExtraCellCount
 {
     return [self shouldShowAddCell] ? 1 : 0;
 }
 
 // Convert a collection view item index to an index into `self.fetchResult`.
-// Returns NSNotFound when `item` points at a non-asset (e.g. the +cell).
+// Returns NSNotFound when `item` points at a non-asset (e.g. the trailing +cell).
 - (NSInteger)assetIndexForItem:(NSInteger)item
 {
-    NSInteger offset = [self leadingExtraCellCount];
-    if (item < offset) {
-        return NSNotFound;
+    if (item < (NSInteger)self.fetchResult.count) {
+        return item;
     }
-    return item - offset;
+    return NSNotFound;
 }
 
 // Convert a fetch-result asset index back to the matching collection view
-// index path (item 0 is reserved for the +cell when shown).
+// index path. Asset indexes map 1:1 to item indexes because the only
+// non-asset cell (the +cell) is appended at the end of the section.
 - (NSIndexPath *)indexPathForAssetIndex:(NSInteger)assetIndex
 {
-    return [NSIndexPath indexPathForItem:(assetIndex + [self leadingExtraCellCount]) inSection:0];
-}
-
-// Shift a set of asset-space indexes into collection-view-space index paths.
-- (NSArray<NSIndexPath *> *)shiftedIndexPathsFromIndexes:(NSIndexSet *)indexes
-{
-    NSMutableArray<NSIndexPath *> *paths = [NSMutableArray arrayWithCapacity:indexes.count];
-    NSInteger offset = [self leadingExtraCellCount];
-    [indexes enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
-        [paths addObject:[NSIndexPath indexPathForItem:(idx + offset) inSection:0]];
-    }];
-    return paths;
+    return [NSIndexPath indexPathForItem:assetIndex inSection:0];
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -214,13 +205,15 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
     [self updateSelectionInfo];
     [self.collectionView reloadData];
     
-    // Scroll to bottom
-    if (self.fetchResult.count > 0 && self.isMovingToParentViewController && !self.disableScrollToBottom) {
+    // Scroll to bottom — show the very last item so the user lands on the
+    // newest photo (and on the trailing +cell when shown in Limited mode).
+    NSInteger lastItem = (NSInteger)self.fetchResult.count - 1 + [self trailingExtraCellCount];
+    if (lastItem >= 0 && self.isMovingToParentViewController && !self.disableScrollToBottom) {
         // when presenting as a .FormSheet on iPad, the frame is not correct until just after viewWillAppear:
         // dispatching to the main thread waits one run loop until the frame is update and the layout is complete
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSIndexPath *indexPath = [self indexPathForAssetIndex:(self.fetchResult.count - 1)];
-            [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionTop animated:NO];
+            NSIndexPath *indexPath = [NSIndexPath indexPathForItem:lastItem inSection:0];
+            [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionBottom animated:NO];
         });
     }
 }
@@ -510,22 +503,22 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
                 [self.collectionView reloadData];
             } else {
                 // If we have incremental diffs, tell the collection view to animate insertions and deletions.
-                // Indexes coming from PHFetchResultChangeDetails are in asset space; shift them by the
-                // number of leading non-asset cells (e.g. the +cell) before applying to the collection view.
+                // The trailing +cell sits past the last asset, so asset-space
+                // indexes from PHFetchResultChangeDetails map 1:1 to item indexes.
                 [self.collectionView performBatchUpdates:^{
                     NSIndexSet *removedIndexes = [collectionChanges removedIndexes];
                     if ([removedIndexes count]) {
-                        [self.collectionView deleteItemsAtIndexPaths:[self shiftedIndexPathsFromIndexes:removedIndexes]];
+                        [self.collectionView deleteItemsAtIndexPaths:[removedIndexes qb_indexPathsFromIndexesWithSection:0]];
                     }
 
                     NSIndexSet *insertedIndexes = [collectionChanges insertedIndexes];
                     if ([insertedIndexes count]) {
-                        [self.collectionView insertItemsAtIndexPaths:[self shiftedIndexPathsFromIndexes:insertedIndexes]];
+                        [self.collectionView insertItemsAtIndexPaths:[insertedIndexes qb_indexPathsFromIndexesWithSection:0]];
                     }
 
                     NSIndexSet *changedIndexes = [collectionChanges changedIndexes];
                     if ([changedIndexes count]) {
-                        [self.collectionView reloadItemsAtIndexPaths:[self shiftedIndexPathsFromIndexes:changedIndexes]];
+                        [self.collectionView reloadItemsAtIndexPaths:[changedIndexes qb_indexPathsFromIndexesWithSection:0]];
                     }
                 } completion:NULL];
             }
@@ -553,12 +546,14 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section
 {
-    return self.fetchResult.count + [self leadingExtraCellCount];
+    return self.fetchResult.count + [self trailingExtraCellCount];
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath
 {
-    // Leading "Add Photos" cell (only present when `showsAddPhotosCell` is YES on the picker controller).
+    // Trailing "Add Photos" cell (only present when `showsAddPhotosCell` is
+    // YES on the picker controller). It is placed after the newest photo so
+    // it appears immediately to the right of the latest asset.
     NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
     if (assetIndex == NSNotFound) {
         QBAddPhotosCell *addCell = [collectionView dequeueReusableCellWithReuseIdentifier:QBAddPhotosCellIdentifier forIndexPath:indexPath];
@@ -699,8 +694,8 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
 - (BOOL)collectionView:(UICollectionView *)collectionView shouldSelectItemAtIndexPath:(NSIndexPath *)indexPath
 {
     NSInteger assetIndex = [self assetIndexForItem:indexPath.item];
-    // The leading "Add Photos" cell must always be tappable: returning YES here
-    // is required so UICollectionView still routes the tap to
+    // The trailing "Add Photos" cell must always be tappable: returning YES
+    // here is required so UICollectionView still routes the tap to
     // didSelectItemAtIndexPath:. The visible "selected" state is cleared right
     // after we forward the tap to the delegate.
     if (assetIndex == NSNotFound) {
