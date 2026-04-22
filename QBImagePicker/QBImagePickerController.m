@@ -76,6 +76,17 @@
     self.albumsNavigationController.navigationBar.tintColor = tintColor;
 }
 
+- (void)setBackIndicatorImage:(UIImage *)backIndicatorImage
+{
+    _backIndicatorImage = backIndicatorImage;
+    // Apply to the picker's internal navigation bar so the chevron used on
+    // push transitions matches the host app's back arrow. Use the original
+    // rendering mode so the image renders as-is rather than being tinted.
+    UIImage *img = [backIndicatorImage imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    self.albumsNavigationController.navigationBar.backIndicatorImage = img;
+    self.albumsNavigationController.navigationBar.backIndicatorTransitionMaskImage = img;
+}
+
 - (void)setUpAlbumsViewController
 {
     // Add QBAlbumsViewController as a child

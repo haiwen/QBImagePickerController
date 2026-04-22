@@ -1,0 +1,23 @@
+/* 
+  QBImagePicker.strings
+  QBImagePicker
+
+  Created by Katsuma Tanaka on 2015/04/03.
+  Copyright (c) 2015 Katsuma Tanaka. All rights reserved.
+*/
+
+"albums.title" = "Nuotraukos";
+
+"assets.footer.photo" = "%ld nuotrauka";
+"assets.footer.photos" = "%ld nuotraukos";
+"assets.footer.video" = "%ld vaizdo įrašas";
+"assets.footer.videos" = "%ld vaizdo įrašai";
+"assets.footer.photo-and-video" = "%ld nuotrauka, %ld vaizdo įrašas";
+"assets.footer.photos-and-video" = "%ld nuotraukos, %ld vaizdo įrašas";
+"assets.footer.photo-and-videos" = "%ld nuotrauka, %ld vaizdo įrašai";
+"assets.footer.photos-and-videos" = "%ld nuotraukos, %ld vaizdo įrašai";
+
+"assets.toolbar.item-selected" = "Pasirinktas %ld elementas";
+"assets.toolbar.items-selected" = "Pasirinkta %ld elementų";
+
+"assets.add-photos" = "Pridėti naują nuotrauką";

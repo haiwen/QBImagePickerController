@@ -58,10 +58,34 @@ typedef NS_ENUM(NSUInteger, QBImagePickerMediaType) {
 // selection without leaving the picker. Defaults to NO.
 @property (nonatomic, assign) BOOL showsAddPhotosCell;
 
-// Theme color applied to the navigation bar (Cancel/Done buttons), the
-// "Add Photos" cell tint, and the selection checkmark body. Defaults to a
-// neutral gray (#666666) so the picker stays visually calm; hosts may
-// override before presenting if a different accent is desired.
+// Base theme color applied to the navigation bar (Cancel/Done buttons).
+// Defaults to a neutral gray (#666666). When the dedicated tints below
+// are nil they fall back to this color, preserving previous behavior.
 @property (nonatomic, strong) UIColor *tintColor;
+
+// Color applied to the selection checkmark body. When nil, falls back to
+// `tintColor`. Hosts typically set this to their accent color (e.g. the
+// Seafile app uses its theme orange) while keeping `tintColor` neutral.
+@property (nonatomic, strong) UIColor *checkmarkTintColor;
+
+// Color applied to the trailing "Add Photos" cell (icon + label). When
+// nil, falls back to `tintColor`.
+@property (nonatomic, strong) UIColor *addPhotosTintColor;
+
+// Image used inside the trailing "Add Photos" cell. When nil, the cell
+// falls back to the SF Symbol "plus". Provide a template-rendered image
+// so it is tinted by `addPhotosTintColor`.
+@property (nonatomic, strong) UIImage *addPhotosIconImage;
+
+// Custom back-chevron image for the picker's internal navigation bar.
+// When set, replaces the system back indicator on push transitions and
+// strips the "back title" so only the icon is shown — matching hosts
+// (like Seafile) that ship their own back arrow asset.
+@property (nonatomic, strong) UIImage *backIndicatorImage;
+
+// Custom image used as the leading bar button on the root albums screen
+// (replacing the default "Cancel" text item). Provide a template image
+// so it is tinted by `tintColor`.
+@property (nonatomic, strong) UIImage *cancelImage;
 
 @end

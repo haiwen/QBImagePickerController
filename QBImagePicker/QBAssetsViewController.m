@@ -11,6 +11,7 @@
 
 // Views
 #import "QBImagePickerController.h"
+#import "QBAlbumsViewController.h"
 #import "QBAssetCell.h"
 #import "QBCheckmarkView.h"
 #import "QBVideoIndicatorView.h"
@@ -27,6 +28,7 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
 - (void)applyTintColor:(UIColor *)tintColor;
+- (void)applyIconImage:(UIImage *)image;
 @end
 
 @implementation QBAddPhotosCell
@@ -41,6 +43,9 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
             self.contentView.backgroundColor = [UIColor colorWithWhite:0.93 alpha:1.0];
         }
 
+        // Default fallback icon — picker hosts can override via
+        // `addPhotosIconImage` on QBImagePickerController and the cell will
+        // pick that up in `applyIconImage:` below.
         UIImage *icon = nil;
         if (@available(iOS 13.0, *)) {
             UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:28.0 weight:UIImageSymbolWeightMedium];
@@ -79,6 +84,13 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
     UIColor *color = tintColor ?: [UIColor systemBlueColor];
     _iconView.tintColor = color;
     _titleLabel.textColor = color;
+}
+
+- (void)applyIconImage:(UIImage *)image
+{
+    if (!image) { return; }
+    // Render as template so the host-provided icon respects the cell tint.
+    _iconView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 @end
@@ -190,7 +202,45 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
     // Configure navigation item
     self.navigationItem.title = self.assetCollection.localizedTitle;
     self.navigationItem.prompt = self.imagePickerController.prompt;
-    
+
+    // Install a custom leading back button when the host provided a
+    // back-arrow image. We pre-render the image at a fixed display size
+    // and place it inside a UIImageView with an explicit frame so the
+    // visible icon size is decoupled from the source asset's pixel
+    // dimensions. The 12x20 icon centered in a 30x44 hit target matches
+    // the main app's SeafNavLeftItem styling. The image is rendered as a
+    // template and tinted with the picker's tintColor so its color stays
+    // in sync with the rest of the host app's nav bar (e.g. Seafile's
+    // #666666 gray) instead of falling back to the raw PNG black.
+    UIImage *backImage = self.imagePickerController.backIndicatorImage;
+    if (backImage) {
+        UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 30, 44)];
+        container.clipsToBounds = YES;
+
+        // Preserve the source aspect ratio while constraining the longest
+        // edge to 20pt — gives a clean back chevron regardless of whether
+        // the host supplied a tall (18x36) or square asset.
+        CGSize source = backImage.size;
+        CGFloat scale = MIN(20.0 / source.width, 20.0 / source.height);
+        if (!isfinite(scale) || scale <= 0) { scale = 1.0; }
+        CGSize iconSize = CGSizeMake(source.width * scale, source.height * scale);
+        UIImage *rendered = [QBAlbumsViewController qb_renderImage:backImage
+                                                            inSize:iconSize
+                                                     renderingMode:UIImageRenderingModeAlwaysTemplate];
+        UIImageView *icon = [[UIImageView alloc] initWithImage:rendered];
+        icon.contentMode = UIViewContentModeScaleAspectFit;
+        icon.frame = CGRectMake(0, (44 - iconSize.height) / 2.0, iconSize.width, iconSize.height);
+        icon.tintColor = self.imagePickerController.tintColor;
+        [container addSubview:icon];
+
+        UIControl *tap = [[UIControl alloc] initWithFrame:container.bounds];
+        [tap addTarget:self action:@selector(qb_popBack:) forControlEvents:UIControlEventTouchUpInside];
+        [container addSubview:tap];
+
+        UIBarButtonItem *backItem = [[UIBarButtonItem alloc] initWithCustomView:container];
+        [self.navigationItem setLeftBarButtonItem:backItem animated:NO];
+    }
+
     // Configure collection view
     self.collectionView.allowsMultipleSelection = self.imagePickerController.allowsMultipleSelection;
     
@@ -289,6 +339,11 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
         [self.imagePickerController.delegate qb_imagePickerController:self.imagePickerController
                                                didFinishPickingAssets:self.imagePickerController.selectedAssets.array];
     }
+}
+
+- (void)qb_popBack:(id)sender
+{
+    [self.navigationController popViewControllerAnimated:YES];
 }
 
 
@@ -559,7 +614,12 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
         QBAddPhotosCell *addCell = [collectionView dequeueReusableCellWithReuseIdentifier:QBAddPhotosCellIdentifier forIndexPath:indexPath];
         NSBundle *bundle = self.imagePickerController.assetBundle;
         addCell.titleLabel.text = NSLocalizedStringFromTableInBundle(@"assets.add-photos", @"QBImagePicker", bundle, @"Add Photos");
-        [addCell applyTintColor:self.imagePickerController.tintColor];
+        // Use the dedicated `addPhotosTintColor` (e.g. the Seafile app sets
+        // it to #999999) when provided, otherwise fall back to the global
+        // `tintColor` for backward compatibility.
+        UIColor *addTint = self.imagePickerController.addPhotosTintColor ?: self.imagePickerController.tintColor;
+        [addCell applyTintColor:addTint];
+        [addCell applyIconImage:self.imagePickerController.addPhotosIconImage];
         return addCell;
     }
 
@@ -567,10 +627,11 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
     cell.tag = indexPath.item;
     cell.showsOverlayViewWhenSelected = self.imagePickerController.allowsMultipleSelection;
 
-    // Theme the selection checkmark to match the host app tint. The
-    // checkmark view is a subview of the cell's overlay and is only
-    // accessible via subview lookup (no IBOutlet on QBAssetCell).
-    UIColor *tint = self.imagePickerController.tintColor;
+    // Theme the selection checkmark to match the host app's accent color.
+    // Hosts set `checkmarkTintColor` independently of the navigation bar
+    // tint so e.g. Seafile keeps Cancel/Done in neutral gray while the
+    // checkmark uses the app's theme orange. Falls back to `tintColor`.
+    UIColor *tint = self.imagePickerController.checkmarkTintColor ?: self.imagePickerController.tintColor;
     if (tint) {
         for (UIView *sub in cell.contentView.subviews) {
             for (UIView *inner in sub.subviews) {

@@ -1,0 +1,23 @@
+/* 
+  QBImagePicker.strings
+  QBImagePicker
+
+  Created by Katsuma Tanaka on 2015/04/03.
+  Copyright (c) 2015 Katsuma Tanaka. All rights reserved.
+*/
+
+"albums.title" = "Myndir";
+
+"assets.footer.photo" = "%ld mynd";
+"assets.footer.photos" = "%ld myndir";
+"assets.footer.video" = "%ld myndband";
+"assets.footer.videos" = "%ld myndbönd";
+"assets.footer.photo-and-video" = "%ld mynd, %ld myndband";
+"assets.footer.photos-and-video" = "%ld myndir, %ld myndband";
+"assets.footer.photo-and-videos" = "%ld mynd, %ld myndbönd";
+"assets.footer.photos-and-videos" = "%ld myndir, %ld myndbönd";
+
+"assets.toolbar.item-selected" = "%ld atriði valið";
+"assets.toolbar.items-selected" = "%ld atriði valin";
+
+"assets.add-photos" = "Bæta við nýrri mynd";

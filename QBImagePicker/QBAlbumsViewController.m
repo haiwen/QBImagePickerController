@@ -57,18 +57,55 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
 - (void)viewWillAppear:(BOOL)animated
 {
     [super viewWillAppear:animated];
-    
+
     // Configure navigation item
     self.navigationItem.title = NSLocalizedStringFromTableInBundle(@"albums.title", @"QBImagePicker", self.imagePickerController.assetBundle, nil);
     self.navigationItem.prompt = self.imagePickerController.prompt;
-    
+
+    // Replace the storyboard's "Cancel" text item with a host-supplied
+    // image. We pre-render the image at a fixed 24x24 point size and
+    // place it inside a UIImageView with an explicit frame so the visible
+    // icon size is decoupled from the source asset's pixel dimensions
+    // (e.g. a 1000x1000 close.png would otherwise be rendered at 1000pt
+    // and overflow the nav bar). A transparent overlay UIControl handles
+    // the tap so we get a 32x44 hit target that matches the main app's
+    // bar button style.
+    UIImage *cancelImage = self.imagePickerController.cancelImage;
+    if (cancelImage) {
+        UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 32, 44)];
+        container.clipsToBounds = YES;
+
+        UIImage *rendered = [QBAlbumsViewController qb_renderImage:cancelImage
+                                                            inSize:CGSizeMake(24, 24)
+                                                     renderingMode:UIImageRenderingModeAlwaysTemplate];
+        UIImageView *icon = [[UIImageView alloc] initWithImage:rendered];
+        icon.contentMode = UIViewContentModeScaleAspectFit;
+        icon.frame = CGRectMake(0, (44 - 24) / 2.0, 24, 24);
+        icon.tintColor = self.imagePickerController.tintColor;
+        [container addSubview:icon];
+
+        UIControl *tap = [[UIControl alloc] initWithFrame:container.bounds];
+        [tap addTarget:self action:@selector(cancel:) forControlEvents:UIControlEventTouchUpInside];
+        [container addSubview:tap];
+
+        UIBarButtonItem *iconCancel = [[UIBarButtonItem alloc] initWithCustomView:container];
+        [self.navigationItem setLeftBarButtonItem:iconCancel animated:NO];
+    }
+
+    // Strip the back-button title on push transitions; the pushed assets
+    // view installs its own custom back button (see QBAssetsViewController).
+    self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@""
+                                                                             style:UIBarButtonItemStylePlain
+                                                                            target:nil
+                                                                            action:nil];
+
     // Show/hide 'Done' button
     if (self.imagePickerController.allowsMultipleSelection) {
         [self.navigationItem setRightBarButtonItem:self.doneButton animated:NO];
     } else {
         [self.navigationItem setRightBarButtonItem:nil animated:NO];
     }
-    
+
     [self updateControlState];
     [self updateSelectionInfo];
 }
@@ -188,6 +225,24 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
     }];
     
     self.assetCollections = assetCollections;
+}
+
+// Re-renders an arbitrary UIImage at a fixed point size, preserving the
+// requested rendering mode. This isolates the bar-button icons from the
+// source asset's pixel dimensions so very large source PNGs (e.g. an
+// app's 1000x1000 close icon) don't overflow the navigation bar.
++ (UIImage *)qb_renderImage:(UIImage *)image
+                     inSize:(CGSize)size
+              renderingMode:(UIImageRenderingMode)mode
+{
+    if (!image) { return nil; }
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
+    format.opaque = NO;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+    UIImage *rendered = [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    }];
+    return [rendered imageWithRenderingMode:mode];
 }
 
 - (UIImage *)placeholderImageWithSize:(CGSize)size
