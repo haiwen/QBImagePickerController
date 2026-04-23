@@ -27,6 +27,9 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
 @interface QBAddPhotosCell : UICollectionViewCell
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIStackView *stackView;
+@property (nonatomic, strong) NSLayoutConstraint *iconWidthConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *iconHeightConstraint;
 - (void)applyTintColor:(UIColor *)tintColor;
 - (void)applyIconImage:(UIImage *)image;
 @end
@@ -48,35 +51,71 @@ static NSString * const QBAddPhotosCellIdentifier = @"QBAddPhotosCell";
         // pick that up in `applyIconImage:` below.
         UIImage *icon = nil;
         if (@available(iOS 13.0, *)) {
-            UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:28.0 weight:UIImageSymbolWeightMedium];
+            UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIImageSymbolWeightMedium];
             icon = [UIImage systemImageNamed:@"plus" withConfiguration:cfg];
         }
         _iconView = [[UIImageView alloc] initWithImage:icon];
         _iconView.contentMode = UIViewContentModeScaleAspectFit;
         _iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:_iconView];
 
         _titleLabel = [[UILabel alloc] init];
-        _titleLabel.font = [UIFont systemFontOfSize:13.0];
+        _titleLabel.font = [UIFont systemFontOfSize:12.0];
         _titleLabel.textAlignment = NSTextAlignmentCenter;
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _titleLabel.numberOfLines = 1;
+        _titleLabel.numberOfLines = 2;
         _titleLabel.adjustsFontSizeToFitWidth = YES;
-        _titleLabel.minimumScaleFactor = 0.75;
-        [self.contentView addSubview:_titleLabel];
+        _titleLabel.minimumScaleFactor = 0.7;
+        _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+
+        // Group icon + label in a vertical stack so the combo is visually
+        // centered within the cell at any size. The previous layout used a
+        // hard-coded `centerY - 12` offset and only 4pt of horizontal padding
+        // around the label, which on iPad popover cells pushed the icon off
+        // center, made the icon look oversized, and clipped the title text.
+        _stackView = [[UIStackView alloc] initWithArrangedSubviews:@[_iconView, _titleLabel]];
+        _stackView.axis = UILayoutConstraintAxisVertical;
+        _stackView.alignment = UIStackViewAlignmentCenter;
+        _stackView.distribution = UIStackViewDistributionFill;
+        _stackView.spacing = 4.0;
+        _stackView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:_stackView];
+
+        _iconWidthConstraint = [_iconView.widthAnchor constraintEqualToConstant:24.0];
+        _iconHeightConstraint = [_iconView.heightAnchor constraintEqualToConstant:24.0];
+
+        NSLayoutConstraint *stackTop = [_stackView.topAnchor constraintGreaterThanOrEqualToAnchor:self.contentView.topAnchor constant:4.0];
+        NSLayoutConstraint *stackBottom = [self.contentView.bottomAnchor constraintGreaterThanOrEqualToAnchor:_stackView.bottomAnchor constant:4.0];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_iconView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor constant:-12.0],
-            [_iconView.widthAnchor constraintEqualToConstant:32.0],
-            [_iconView.heightAnchor constraintEqualToConstant:32.0],
+            _iconWidthConstraint,
+            _iconHeightConstraint,
 
-            [_titleLabel.topAnchor constraintEqualToAnchor:_iconView.bottomAnchor constant:6.0],
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:4.0],
-            [_titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-4.0],
+            [_stackView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [_stackView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+            [_stackView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:2.0],
+            [_stackView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-2.0],
+            stackTop,
+            stackBottom,
         ]];
     }
     return self;
+}
+
+- (void)layoutSubviews
+{
+    [super layoutSubviews];
+
+    // Adapt the icon size to the actual cell size so it neither dominates
+    // small cells (iPad popover with many columns) nor looks lost in large
+    // ones. The previous fixed 32pt icon looked oversized inside the
+    // ~70pt cells produced by the iPad popover layout.
+    CGFloat shortSide = MIN(CGRectGetWidth(self.contentView.bounds), CGRectGetHeight(self.contentView.bounds));
+    if (shortSide <= 0) { return; }
+    CGFloat target = MAX(20.0, MIN(28.0, floor(shortSide * 0.30)));
+    if (fabs(_iconWidthConstraint.constant - target) > 0.5) {
+        _iconWidthConstraint.constant = target;
+        _iconHeightConstraint.constant = target;
+    }
 }
 
 - (void)applyTintColor:(UIColor *)tintColor
